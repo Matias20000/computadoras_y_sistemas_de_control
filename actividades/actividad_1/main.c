@@ -6,9 +6,9 @@
 #include <math.h>
 
 // GPIO del ADC
-#define ANALOG_GPIO
+#define ANALOG_GPIO 27
 // Canal del ADC
-#define ANALOG_C
+#define ANALOG_CHANNEL 0
 
 // Tiempo de refresco para el siete segmentos
 #define SLEEP_MS 10
@@ -16,11 +16,11 @@
 #define ADC_DELAY_MS  500
 
 // Constante de proporcionalidad para el NTC
-#define BETA
+#define BETA  3950
 // Resistencia a 25 grados del NTC
-#define RT0
+#define RT0   10000
 // Resistencia en serie al NTC
-#define RS
+#define RS    10000
 
 // Variable para almacenar el resultado del ADC
 uint16_t adc_value = 0;
@@ -32,30 +32,26 @@ float temperatura = 0.0;
  * @param t: puntero a repeating_timer
  */
 bool muestreo_periodico(struct repeating_timer *t) {
-  // Lectura analogica (variable adc_value)
+  // Lectura analogica
+  uint16_t adc_value = adc_read();
+    // Calcular temperatura utilizando la ecuación de Steinhart-Hart
+  temperatura = 1 / (log(1 / (4095. / adc_value - 1)) / BETA + 1.0 / 298.15) - 273.15;
 
-  // Calcular valor de temperatura (variable temperatura)
-
+  return true;
 }
 
-/*
- * @brief Display temperature value in 7 segment display
- * @param temperature: value to display
- */
+
 void display_temp(float temperatura) {
   // Variable para armar el string
   char str[16];
   // Armo string con temperatura
   sprintf(str, "Temp=%.2f C", temperatura);
   // Limpio display (si lo hubiese)
-
+  lcd_clear();
   // Muestro (printf o lcd_string)
-
+  lcd_string(str);
 }
 
-/*
- * @brief Programa principal
- */
 int main() {
   // Inicializacion de UART
   stdio_init_all();
@@ -64,30 +60,37 @@ int main() {
   // Creo un callback para la interrupcion del timer
   add_repeating_timer_ms(ADC_DELAY_MS, muestreo_periodico, NULL, &timer);
   // Inicializo ADC
+  adc_init();
 
-	// Inicializo GPIO26 como entrada analogica
+  // Inicializo GPIO27 como entrada analogica
+  adc_gpio_init(27);
 
   // Selecciono canal analogico
+  adc_select_input(1);
 
+  // Solo si se usa LCD con I2C
+  // Configuro el I2C0 a 100 KHz de clock
+  i2c_init(i2c0, 100 * 100000);
 
-	// Solo si se usa LCD con I2C
-	// Configuro el I2C0 a 100 KHz de clock
+  // Elijo GPIO4 como linea de SDA
+  gpio_set_function(4, GPIO_FUNC_I2C);
 
-	// Elijo GPIO4 como linea de SDA
+  // Elijo GPIO5 como linea de SCL
+  gpio_set_function(5, GPIO_FUNC_I2C);
 
-	// Elijo GPIO5 como linea de SCL
+  // Activo pull-up en ambos GPIO, son debiles por lo que
+  // es recomendable usar pull-ups externas
+  gpio_pull_up(4);
+  gpio_pull_up(5);
 
-	// Activo pull-up en ambos GPIO, son debiles por lo que
-	// es recomendable usar pull-ups externas
+  // Inicializo display (si lo hubiese)
+  lcd_init();
 
-	// Inicializo display (si lo hubiese)
-
-
-	// Bucle infinito
-  	while (true) {
-    	// Muestro temperatura
-    	display_temp(temperatura);
-    	// Espero
-    	sleep_ms(SLEEP_MS);
-  	}
+  // Bucle infinito
+  while (true) {
+    // Muestro temperatura
+    display_temp(temperatura);
+    // Espero
+    sleep_ms(SLEEP_MS);
+  }
 }
